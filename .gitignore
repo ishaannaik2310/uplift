@@ -1,0 +1,32 @@
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Python cache and bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.ipynb_checkpoints/
+
+# Node.js and Next.js
+node_modules/
+web/node_modules/
+.next/
+web/.next/
+
+# Cache and environment files
+.matplotlib_cache/
+.DS_Store
+*.log
+.env*
+!.env.example
+
+# Raw and compressed data
+data/*.csv
+data/*.gz
+
+# Large regenerable experiment artifacts (>35 MB)
+# Regenerable by running python src/profit.py
+results/predictions_all_seeds.csv
