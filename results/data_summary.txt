@@ -1,0 +1,67 @@
+======================================================================
+HILLSTROM EMAIL ANALYTICS DATASET VERIFICATION & SUMMARY
+======================================================================
+
+1. DATASET SHAPE & SCHEMA
+----------------------------------------------------------------------
+Rows: 64,000
+Columns: 12
+
+Columns and Data Types:
+  - recency            : int64
+  - history_segment    : str
+  - history            : float64
+  - mens               : int64
+  - womens             : int64
+  - zip_code           : str
+  - newbie             : int64
+  - channel            : str
+  - segment            : str
+  - visit              : int64
+  - conversion         : int64
+  - spend              : float64
+
+2. MISSING VALUES PER COLUMN
+----------------------------------------------------------------------
+No missing values detected in any column (0 missing across all rows).
+
+3. VALUE COUNTS
+----------------------------------------------------------------------
+Treatment Column ('segment') Value Counts:
+  Womens E-Mail    : 21,387 ( 33.42%)
+  Mens E-Mail      : 21,307 ( 33.29%)
+  No E-Mail        : 21,306 ( 33.29%)
+
+Outcome Column ('visit') Value Counts:
+  0                : 54,606 ( 85.32%)
+  1                :  9,394 ( 14.68%)
+
+Outcome Column ('conversion') Value Counts:
+  0                : 63,422 ( 99.10%)
+  1                :    578 (  0.90%)
+
+4. CONVERSION RATES
+----------------------------------------------------------------------
+Overall Conversion Rate: 0.0090 (0.90%)
+Total Conversions: 578 / 64,000
+
+Conversion Rate per Segment:
+  Mens E-Mail      : 0.0125 (1.25%)  [267 / 21,307]
+  No E-Mail        : 0.0057 (0.57%)  [122 / 21,306]
+  Womens E-Mail    : 0.0088 (0.88%)  [189 / 21,387]
+
+5. MEAN SPEND PER SEGMENT
+----------------------------------------------------------------------
+Overall Mean Spend: $1.0509
+Total Revenue: $67,258.13
+
+Mean Spend per Segment (All Customers in Segment):
+  Mens E-Mail      : $1.4226  (Total: $30,311.69)
+  No E-Mail        : $0.6528  (Total: $13,908.33)
+  Womens E-Mail    : $1.0772  (Total: $23,038.11)
+
+Mean Spend among Converting Customers (conversion == 1):
+  Mens E-Mail      : $113.53 per converter  (N=267)
+  No E-Mail        : $114.00 per converter  (N=122)
+  Womens E-Mail    : $121.89 per converter  (N=189)
+======================================================================

@@ -1,0 +1,43 @@
+{
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ],
+  "mode": "any",
+  "outcome": "visit",
+  "n_samples": 64000,
+  "n_features": 15,
+  "feature_names": [
+    "recency",
+    "log_history",
+    "mens",
+    "womens",
+    "newbie",
+    "zip_code_Rural",
+    "zip_code_Surburban",
+    "zip_code_Urban",
+    "channel_Multichannel",
+    "channel_Phone",
+    "channel_Web",
+    "recency_band_1-3",
+    "recency_band_4-6",
+    "recency_band_7-9",
+    "recency_band_10-12"
+  ],
+  "library_versions": {
+    "python": "3.14.6 (tags/v3.14.6:c63aec6, Jun 10 2026, 10:26:10) [MSC v.1944 64 bit (AMD64)]",
+    "numpy": "2.5.4",
+    "pandas": "3.1.0",
+    "scikit-learn": "1.9.1",
+    "xgboost": "3.4.1",
+    "scikit-uplift": "0.5.1"
+  }
+}

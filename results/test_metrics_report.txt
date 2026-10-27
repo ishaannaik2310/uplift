@@ -1,0 +1,172 @@
+==============================================================================
+  UPLIFT METRICS TEST SUITE
+==============================================================================
+Importing sklift metrics for cross-check...
+sklift.metrics imported successfully.
+
+Loading Hillstrom dataset...
+Dataset: 64,000 rows | treated=42,694 | control=21,306
+Overall observed uplift (visit rate T - C): +0.060882
+
+==============================================================================
+  TEST A: RANDOM SCORES -> QINI COEFFICIENT ~ 0
+==============================================================================
+Running 200 random score permutations on Hillstrom visit data (mode='any')...
+Seeds for permutations: np.random.default_rng(42)
+
+Results over 200 trials:
+  Mean Qini : -0.725001
+  Std Qini  : 35.545140
+  SEM       : 2.513421
+  |mean| < 3*SEM threshold: |-0.725001| < 7.540263
+  TEST A: PASS — |mean Qini| is within 3-sigma of zero
+
+==============================================================================
+  TEST B: SYNTHETIC DATASET — KNOWN EFFECT (unit test only; never in results/)
+==============================================================================
+[SYNTHETIC DATA — NOT HILLSTROM — used only for unit testing]
+
+Synthetic dataset: N=1000
+  Subgroup A (responders): n=200, nT=100, nC=100
+    rate_T=0.8, rate_C=0.2, true uplift=+0.6
+  Subgroup B (non-resp):   n=800, nT=400, nC=400
+    rate_T=0.3, rate_C=0.3, true uplift=+0.0
+
+Analytical expected Qini (oracle, in raw Q-units): 24.0000
+Analytical Qini per customer (/ N):                0.024000
+1-sigma sampling noise on Q_end:                   5.6569
+
+Observed Qini (oracle score) :  +15.7039  (per customer: +0.015704)
+Observed Qini (reversed score): -19.9636  (per customer: -0.019964)
+Difference |observed - analytical|: 8.2961  vs 3-sigma = 16.9706
+
+  Oracle Qini > 0:           PASS (+15.7039)
+  Reversed Qini < 0:         PASS (-19.9636)
+  |Obs - Analytical| < 3*sigma: PASS
+
+Decile table with oracle score (should show effect in top 2 deciles):
+  PASS: All 10 deciles have both treated and control members.
+
+   Decile    N_T    N_C   Rate_T   Rate_C   Uplift
+  --------------------------------------------------
+        1     55     45   0.6909   0.2889  +0.4020
+        2     45     55   0.7778   0.2727  +0.5051
+        3     43     57   0.2558   0.2982  -0.0424
+        4     47     53   0.3191   0.3396  -0.0205
+        5     51     49   0.3333   0.3673  -0.0340
+        6     52     48   0.2692   0.2292  +0.0401
+        7     48     52   0.3333   0.3462  -0.0128
+        8     50     50   0.4000   0.4400  -0.0400
+        9     49     51   0.3061   0.1373  +0.1689
+       10     60     40   0.2833   0.3250  -0.0417
+
+  Expected: deciles 1-2 (subgroup A) should show uplift ~+0.6,
+            deciles 3-10 (subgroup B) should show uplift ~0.0.
+
+==============================================================================
+  TEST C: LIBRARY CROSS-CHECK vs sklift.metrics
+==============================================================================
+
+--- C1. Qini CURVE — Hillstrom random score (point-by-point comparison) ---
+sklift.qini_curve x-axis range:
+  sklift x: 0 to 64000 (integer counts, N=64000)
+  ours   x: 0 to 1.0000 (fraction, 1.0 = full population)
+  Scaling: x_ours = x_sklift / N  =>  x_sklift[-1] / N = 1.000000
+
+Point-by-point Q values (our interp vs sklift at sklift's threshold points):
+  Number of threshold points (sklift): 64001
+  Max  |Q_ours - Q_sklift|: 0.000000
+  Mean |Q_ours - Q_sklift|: 0.000000
+  TEST C1-Qini curve: PASS (max diff < 1.0)
+
+--- C2. Uplift CURVE — Hillstrom random score (point-by-point comparison) ---
+  Number of threshold points (sklift): 64001
+  sklift x-axis: counts [0, 64000]; ours: fraction [0, 1.00]
+  Max  |U_ours - U_sklift|: 0.000000
+  Mean |U_ours - U_sklift|: 0.000000
+  TEST C2-Uplift curve: PASS (max diff < 1.0)
+
+--- C3. SCALAR COEFFICIENTS — Hillstrom random score ---
+
+  Metric                                     Ours         sklift
+  --------------------------------------------------------------
+  qini_coefficient (raw)               -27.119577    N/A (ratio)
+  qini_coefficient / N                  -0.000424    N/A (ratio)
+  qini_auc_score (sklift norm.)               N/A      -0.005064
+  auuc (raw, not normalized)         +1903.639579            N/A
+  auuc_normalized (minus random)       -44.583053            N/A
+  uplift_auc_score (sklift norm.)             N/A      -0.003232
+
+  NORMALIZATION EXPLANATION:
+  - Our qini_coefficient:
+      = AUC(Q curve) - Q(1)/2
+      Subtracts the random diagonal. NOT divided by a perfect model.
+      Raw units: cumulative incremental outcomes (same scale as Q values).
+      Divided by N gives incremental outcomes per customer.
+
+  - sklift.qini_auc_score:
+      = (AUC_actual - AUC_baseline) / (AUC_perfect - AUC_baseline)
+      x-axis in counts (range [0, N]), making AUC scale with N.
+      Normalizes by the PERFECT model, producing a score in ~[0, 1].
+      Not directly comparable to our coefficient without perfect-model AUC.
+
+  - Our auuc / auuc_normalized:
+      = trapz(U(k) dk) with x in fraction [0,1].
+      _normalized subtracts U(1)/2 (random diagonal area).
+      NOT divided by perfect model AUC.
+
+  - sklift.uplift_auc_score:
+      = (AUC_actual - AUC_baseline) / (AUC_perfect - AUC_baseline)
+      Normalizes by the perfect uplift curve. Dimensionless ratio.
+      Cannot be directly compared to our raw AUUC values.
+
+  CONCLUSION: Our metrics and sklift metrics measure the same shape of curve
+  (formula is identical) but differ in x-axis scale (fraction vs count) and
+  in normalization (absolute area vs ratio to perfect model). The curve
+  point-by-point comparison after x-axis rescaling shows agreement.
+    
+
+--- C4. CURVE CROSS-CHECK — Synthetic dataset ---
+  Synthetic Qini (ours raw):    +15.7039
+  Synthetic qini_auc_score (sklift, normalized): +0.1244
+  Qini curve max |diff| on synthetic: 0.000000
+  TEST C4-Synthetic curve: PASS (max diff < 0.5)
+
+==============================================================================
+  TEST D: DECILE EXACT IDENTITIES
+==============================================================================
+
+--- D1. Counts sum to totals ---
+  Sum n_treated across deciles: 42,694  (expected: 42,694)
+  Sum n_control across deciles: 21,306  (expected: 21,306)
+  TEST D1: PASS
+
+--- D2. Pooled treated outcome rate equals overall treated rate ---
+  Pooled treated rate (from deciles): 0.16704923
+  Overall treated rate (direct):      0.16704923
+  |Difference|: 0.00e+00
+  Pooled control rate (from deciles): 0.10616728
+  Overall control rate (direct):      0.10616728
+  |Difference|: 0.00e+00
+  TEST D2: PASS (tolerance 1e-10)
+
+--- D3. Average per-decile uplift vs overall uplift ---
+  Mean per-decile uplift:       +0.060879
+  Overall treated-minus-control: +0.060882
+  Note: These may differ because decile sizes differ and 'uplift' is an
+        unweighted average across bins. Exact identity only holds for D1/D2.
+
+==============================================================================
+  SUMMARY
+==============================================================================
+  PASS  A  Random Qini ~ 0 (|mean| < 3*SEM)
+  PASS  B1 Oracle Qini > 0
+  PASS  B2 Reversed Qini < 0
+  PASS  B3 |Observed - Analytical| < 3σ
+  PASS  C1 Qini curve point-by-point
+  PASS  C2 Uplift curve point-by-point
+  PASS  C4 Synthetic Qini curve
+  PASS  D1 Decile counts sum to totals
+  PASS  D2 Pooled rates equal overall rates
+
+  9/9 tests passed.
