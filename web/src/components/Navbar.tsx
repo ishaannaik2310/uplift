@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, Menu, X, Target, Sliders, Info, LineChart } from "lucide-react";
+import { BarChart3, Menu, X, Target, Sliders, Info, LineChart, FileSpreadsheet } from "lucide-react";
 import ThemeToggle from "./ThemeToggle";
 
 function GithubIcon({ className = "w-4 h-4" }: { className?: string }) {
@@ -22,6 +22,7 @@ const NAV_ITEMS = [
   { href: "/", label: "Overview", icon: BarChart3 },
   { href: "/models", label: "Models & Rigor", icon: LineChart },
   { href: "/simulator", label: "Profit Simulator", icon: Sliders },
+  { href: "/planner", label: "Campaign Planner", icon: FileSpreadsheet },
   { href: "/about", label: "About & Methods", icon: Info },
 ];
 
