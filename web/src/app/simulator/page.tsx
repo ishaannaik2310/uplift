@@ -2,27 +2,33 @@
 
 import React, { useEffect, useState, useMemo } from "react";
 import {
-  Sliders,
-  TrendingUp,
-  DollarSign,
-  AlertCircle,
-  CheckCircle2,
-  Sparkles,
+  RotateCcw,
   Percent,
+  DollarSign,
   Layers,
+  Sparkles,
+  TrendingUp,
+  Ban,
+  HelpCircle,
 } from "lucide-react";
 import { CustomersData, PolicyId, ProfitGridData } from "@/lib/types";
 import { fetchCustomersData, fetchProfitGridData } from "@/lib/data";
 import { formatCurrency } from "@/lib/formatters";
 import ProfitChart from "@/components/ProfitChart";
 import CustomerTable from "@/components/CustomerTable";
+import { SkeletonCard, SkeletonChart, ErrorState } from "@/components/SkeletonLoader";
 
-const POLICY_OPTIONS: { id: PolicyId; label: string; tag: string }[] = [
-  { id: "t_learner_lr", label: "T-Learner (LR)", tag: "Recommended Uplift" },
-  { id: "x_learner_lr", label: "X-Learner (LR)", tag: "Uplift Meta-Learner" },
-  { id: "s_learner_xgb", label: "S-Learner (XGB)", tag: "Tree-Based Uplift" },
-  { id: "response_lr", label: "Response Model", tag: "Naive Propensity" },
-  { id: "random", label: "Random", tag: "Random Targeting" },
+const DEFAULT_MARGIN = 0.30;
+const DEFAULT_COST = 0.05;
+const DEFAULT_BUDGET = 0.30;
+const DEFAULT_POLICY: PolicyId = "t_learner_lr";
+
+const POLICY_OPTIONS: { id: PolicyId; label: string; short: string; tag: string }[] = [
+  { id: "t_learner_lr", label: "T-Learner (LR)", short: "T-LR", tag: "two models" },
+  { id: "x_learner_lr", label: "X-Learner (LR)", short: "X-LR", tag: "cross-estimation" },
+  { id: "s_learner_xgb", label: "S-Learner (XGB)", short: "S-XGB", tag: "one model" },
+  { id: "response_lr", label: "Response Model", short: "Response", tag: "treated-only model" },
+  { id: "random", label: "Random", short: "Random", tag: "random" },
 ];
 
 export default function SimulatorPage() {
@@ -32,30 +38,41 @@ export default function SimulatorPage() {
   const [error, setError] = useState<string | null>(null);
 
   // Simulator Interactive State
-  const [margin, setMargin] = useState<number>(0.30);
-  const [cost, setCost] = useState<number>(0.05);
-  const [budgetFraction, setBudgetFraction] = useState<number>(0.30);
-  const [selectedPolicy, setSelectedPolicy] = useState<PolicyId>("t_learner_lr");
+  const [margin, setMargin] = useState<number>(DEFAULT_MARGIN);
+  const [cost, setCost] = useState<number>(DEFAULT_COST);
+  const [budgetFraction, setBudgetFraction] = useState<number>(DEFAULT_BUDGET);
+  const [selectedPolicy, setSelectedPolicy] = useState<PolicyId>(DEFAULT_POLICY);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
-    async function loadData() {
-      try {
-        const [grid, cust] = await Promise.all([
-          fetchProfitGridData(),
-          fetchCustomersData(),
-        ]);
+    Promise.all([fetchProfitGridData(), fetchCustomersData()])
+      .then(([grid, cust]) => {
         setProfitGrid(grid);
         setCustomersData(cust);
         if (grid.default_margin) setMargin(grid.default_margin);
         if (grid.default_cost) setCost(grid.default_cost);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load simulation data");
-      } finally {
         setLoading(false);
-      }
-    }
-    loadData();
-  }, []);
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : "Failed to load simulation data");
+        setLoading(false);
+      });
+  }, [reloadKey]);
+
+  const handleRetry = () => {
+    setLoading(true);
+    setError(null);
+    setReloadKey((k) => k + 1);
+  };
+
+  const resetDefaults = () => {
+    if (profitGrid?.default_margin) setMargin(profitGrid.default_margin);
+    else setMargin(DEFAULT_MARGIN);
+    if (profitGrid?.default_cost) setCost(profitGrid.default_cost);
+    else setCost(DEFAULT_COST);
+    setBudgetFraction(DEFAULT_BUDGET);
+    setSelectedPolicy(DEFAULT_POLICY);
+  };
 
   // Compute profit and variation at current settings
   const calculations = useMemo(() => {
@@ -88,10 +105,7 @@ export default function SimulatorPage() {
     const randomVariation = n_pop * f * margin * randomStd;
 
     // 4. Break-even analysis for selected policy
-    // Positive ROI break-even cost: margin * polDelta
     const roiBreakevenCost = margin * polDelta;
-
-    // Selective break-even cost (beats emailing everyone): margin * breakeven_mean
     const beMean = breakeven?.policies?.[selectedPolicy]?.mean?.[validIdx] ?? null;
     const selectiveBreakevenCost = beMean !== null ? margin * beMean : null;
 
@@ -109,12 +123,9 @@ export default function SimulatorPage() {
       };
     });
 
-    // Best policy at current budget
     policyProfitsAtBudget.sort((a, b) => b.profit - a.profit);
     const bestSelective = policyProfitsAtBudget[0];
 
-    // Candidate options for recommendation:
-    // { No Campaign ($0), Target Everyone ($everyoneProfit), Best Selective ($bestSelective.profit) }
     const candidates = [
       { name: "No Campaign", profit: 0, variation: 0, type: "none" },
       { name: "Target Everyone (100%)", profit: everyoneProfit, variation: everyoneVariation, type: "everyone" },
@@ -151,376 +162,371 @@ export default function SimulatorPage() {
 
   if (loading) {
     return (
-      <div className="py-20 text-center space-y-4">
-        <div className="inline-block w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-        <p className="text-sm text-slate-500">Loading campaign simulator data...</p>
+      <div className="space-y-10">
+        <div className="space-y-3 max-w-2xl">
+          <div className="h-8 w-60 bg-slate-200 dark:bg-slate-800 rounded-xl animate-pulse" />
+          <div className="h-4 w-96 bg-slate-100 dark:bg-slate-800/60 rounded-md animate-pulse" />
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <SkeletonCard className="h-96" />
+          <div className="lg:col-span-2 space-y-6">
+            <SkeletonCard count={3} />
+            <SkeletonChart />
+          </div>
+        </div>
       </div>
     );
   }
 
   if (error || !profitGrid || !customersData || !calculations) {
     return (
-      <div className="p-6 rounded-xl border border-rose-200 bg-rose-50 dark:bg-rose-950/30 text-rose-800 dark:text-rose-300">
-        <h2 className="font-bold text-base">Error Loading Simulator</h2>
-        <p className="text-sm mt-1">{error || "Simulation dataset not found"}</p>
-      </div>
+      <ErrorState
+        title="Failed to load simulation environment"
+        message={error}
+        onRetry={handleRetry}
+      />
     );
   }
 
+  const selectedPolicyObj = POLICY_OPTIONS.find((p) => p.id === selectedPolicy);
+
   return (
-    <div className="space-y-8 max-w-6xl mx-auto">
+    <div className="space-y-12">
       {/* Page Header */}
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
-          Targeting & Profit Simulator
+      <section className="space-y-2">
+        <h1 className="text-2xl sm:text-4xl font-serif font-bold text-slate-900 dark:text-white tracking-tight break-words">
+          Targeting &amp; Profit Simulator
         </h1>
-        <p className="text-slate-600 dark:text-slate-400 text-sm mt-1 max-w-3xl">
-          Simulate campaign profitability across different unit economics, contact costs, and budget fractions
+        <p className="text-sm sm:text-base text-slate-600 dark:text-slate-300 max-w-3xl leading-relaxed">
+          Simulate campaign profitability across unit economics, contact costs, and budget fractions
           evaluated on out-of-sample RCT customer response data.
         </p>
-      </div>
+      </section>
 
-      {/* Simulator Control Panel */}
-      <div className="p-6 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm space-y-6">
-        <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
-          <div className="flex items-center gap-2">
-            <Sliders className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-            <h2 className="text-base font-bold text-slate-900 dark:text-white">
-              Simulation Parameters
-            </h2>
-          </div>
-          <span className="text-xs text-slate-500 dark:text-slate-400">
-            Scaled to {calculations.n_pop.toLocaleString()} customers
-          </span>
-        </div>
+      {/* Two-Column Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        {/* Left Column: Sticky Control Panel */}
+        <aside className="lg:col-span-4 lg:sticky lg:top-20 space-y-6">
+          <div className="p-6 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-[#111827] shadow-xs space-y-6">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
+              <div>
+                <h2 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                  Simulation Parameters
+                </h2>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Scaled to {calculations.n_pop.toLocaleString()} customers
+                </p>
+              </div>
+              <button
+                onClick={resetDefaults}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold text-slate-600 dark:text-slate-400 hover:text-teal-700 dark:hover:text-teal-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                title="Reset to default economic parameters"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span>Reset</span>
+              </button>
+            </div>
 
-        {/* Sliders Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Margin Slider */}
-          <div className="space-y-2">
-            <div className="flex justify-between items-center text-xs">
-              <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1">
-                <Percent className="w-3.5 h-3.5 text-indigo-500" />
-                Contribution Margin
-              </span>
-              <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400 text-sm">
-                {(margin * 100).toFixed(0)}%
-              </span>
-            </div>
-            <input
-              type="range"
-              min="0.05"
-              max="0.60"
-              step="0.01"
-              value={margin}
-              onChange={(e) => setMargin(parseFloat(e.target.value))}
-              className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-600"
-            />
-            <div className="flex justify-between text-[11px] text-slate-400">
-              <span>5% (Low)</span>
-              <span>30% (Default)</span>
-              <span>60% (High)</span>
-            </div>
-          </div>
-
-          {/* Cost Slider */}
-          <div className="space-y-2">
-            <div className="flex justify-between items-center text-xs">
-              <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1">
-                <DollarSign className="w-3.5 h-3.5 text-indigo-500" />
-                Cost per Email
-              </span>
-              <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400 text-sm">
-                ${cost.toFixed(2)}
-              </span>
-            </div>
-            <input
-              type="range"
-              min="0.00"
-              max="0.60"
-              step="0.01"
-              value={cost}
-              onChange={(e) => setCost(parseFloat(e.target.value))}
-              className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-600"
-            />
-            <div className="flex justify-between text-[11px] text-slate-400">
-              <span>$0.00 (Zero)</span>
-              <span>$0.05 (Default)</span>
-              <span>$0.60 (High)</span>
-            </div>
-          </div>
-
-          {/* Budget Fraction Slider */}
-          <div className="space-y-2">
-            <div className="flex justify-between items-center text-xs">
-              <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1">
-                <Layers className="w-3.5 h-3.5 text-indigo-500" />
-                Targeting Budget (Top %)
-              </span>
-              <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400 text-sm">
-                {Math.round(budgetFraction * 100)}% ({(budgetFraction * calculations.n_pop).toLocaleString()} users)
-              </span>
-            </div>
-            <input
-              type="range"
-              min="0.05"
-              max="1.00"
-              step="0.05"
-              value={budgetFraction}
-              onChange={(e) => setBudgetFraction(parseFloat(e.target.value))}
-              className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-600"
-            />
-            <div className="flex justify-between text-[11px] text-slate-400">
-              <span>5% (Niche)</span>
-              <span>30% (Selective)</span>
-              <span>100% (All)</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Policy Selector Pills */}
-        <div className="space-y-2 pt-2">
-          <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-            Targeting Model / Policy:
-          </label>
-          <div className="flex flex-wrap gap-2">
-            {POLICY_OPTIONS.map((pol) => {
-              const active = selectedPolicy === pol.id;
-              return (
-                <button
-                  key={pol.id}
-                  onClick={() => setSelectedPolicy(pol.id)}
-                  className={`px-3 py-2 rounded-lg text-xs font-medium transition-all flex items-center gap-2 border ${
-                    active
-                      ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
-                      : "bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600"
-                  }`}
+            {/* Slider 1: Contribution Margin */}
+            <div className="space-y-2">
+              <div className="flex justify-between items-center text-xs">
+                <label
+                  htmlFor="margin-slider"
+                  className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5"
                 >
-                  <span>{pol.label}</span>
-                  <span
-                    className={`text-[10px] px-1.5 py-0.5 rounded font-normal ${
-                      active ? "bg-indigo-700 text-white" : "bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400"
-                    }`}
-                  >
-                    {pol.tag}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* Dynamic Recommendation Banner */}
-      <div
-        className={`p-5 rounded-xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${
-          calculations.allProfitsNegative
-            ? "border-rose-300 bg-rose-50 dark:bg-rose-950/40 text-rose-900 dark:text-rose-200"
-            : calculations.winner.type === "everyone"
-            ? "border-amber-300 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200"
-            : "border-indigo-300 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-900 dark:text-indigo-200"
-        }`}
-      >
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5 flex-shrink-0" />
-            <h3 className="text-sm font-bold">
-              Recommendation Engine Output
-            </h3>
-          </div>
-          <p className="text-xs leading-relaxed">
-            {calculations.allProfitsNegative ? (
-              <span>
-                <strong>No Campaign:</strong> At a contact cost of ${cost.toFixed(2)} and margin of{" "}
-                {(margin * 100).toFixed(0)}%, all targeting policies yield negative expected profit. Avoid sending emails.
-              </span>
-            ) : calculations.isWithinVariation ? (
-              <span>
-                At higher contact costs, selective targeting can earn more profit in-sample, but the differences
-                are within split-to-split variation. The difference between <strong>{calculations.winner.name}</strong> (
-                {formatCurrency(calculations.winner.profit, 0)}) and <strong>{calculations.runnerUp.name}</strong> (
-                {formatCurrency(calculations.runnerUp.profit, 0)}) is {formatCurrency(calculations.gap, 0)}, which is within
-                the split-to-split variation (&plusmn;{formatCurrency(calculations.largerVariation, 0)}). Either policy is reasonable.
-              </span>
-            ) : (
-              <span>
-                <strong>{calculations.winner.name}</strong> yields the highest expected profit at{" "}
-                <strong>{formatCurrency(calculations.winner.profit, 0)}</strong>, outperforming {calculations.runnerUp.name} by{" "}
-                {formatCurrency(calculations.gap, 0)} beyond split-to-split variation.
-              </span>
-            )}
-          </p>
-        </div>
-
-        <div className="flex-shrink-0 self-end sm:self-center font-mono text-right">
-          <div className="text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400">
-            Winner Profit
-          </div>
-          <div className="text-lg font-bold text-slate-900 dark:text-white">
-            {formatCurrency(calculations.winner.profit, 0)}
-          </div>
-        </div>
-      </div>
-
-      {/* KPI Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Card 1: Selected Policy */}
-        <div className="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm space-y-2">
-          <div className="flex justify-between items-start">
-            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-              Selected Policy ({Math.round(budgetFraction * 100)}%)
-            </span>
-            <span className="p-1 rounded bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400">
-              <TrendingUp className="w-4 h-4" />
-            </span>
-          </div>
-          <div className="text-2xl font-bold font-mono text-slate-900 dark:text-white">
-            {formatCurrency(calculations.polProfit, 0)}
-          </div>
-          <p className="text-[11px] text-slate-500 dark:text-slate-400">
-            &plusmn;{formatCurrency(calculations.polVariation, 0)} across repeated splits
-          </p>
-        </div>
-
-        {/* Card 2: Target Everyone */}
-        <div className="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm space-y-2">
-          <div className="flex justify-between items-start">
-            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-              Target Everyone (100%)
-            </span>
-            <span className="p-1 rounded bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400">
-              <Layers className="w-4 h-4" />
-            </span>
-          </div>
-          <div className="text-2xl font-bold font-mono text-slate-900 dark:text-white">
-            {formatCurrency(calculations.everyoneProfit, 0)}
-          </div>
-          <p className="text-[11px] text-slate-500 dark:text-slate-400">
-            &plusmn;{formatCurrency(calculations.everyoneVariation, 0)} across repeated splits
-          </p>
-        </div>
-
-        {/* Card 3: Difference vs Target Everyone */}
-        <div className="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm space-y-2">
-          <div className="flex justify-between items-start">
-            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-              Diff vs Target Everyone
-            </span>
-            <span className="p-1 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
-              <DollarSign className="w-4 h-4" />
-            </span>
-          </div>
-          <div
-            className={`text-2xl font-bold font-mono ${
-              calculations.diffVsEveryone >= 0
-                ? "text-emerald-600 dark:text-emerald-400"
-                : "text-rose-600 dark:text-rose-400"
-            }`}
-          >
-            {calculations.diffVsEveryone >= 0 ? "+" : ""}
-            {formatCurrency(calculations.diffVsEveryone, 0)}
-          </div>
-          <p className="text-[11px] text-slate-500 dark:text-slate-400">
-            {calculations.diffVsEveryone >= 0 ? "Selective gains profit" : "Emailing everyone earns more"}
-          </p>
-        </div>
-
-        {/* Card 4: Difference vs Random Targeting */}
-        <div className="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm space-y-2">
-          <div className="flex justify-between items-start">
-            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-              Diff vs Random ({Math.round(budgetFraction * 100)}%)
-            </span>
-            <span className="p-1 rounded bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400">
-              <CheckCircle2 className="w-4 h-4" />
-            </span>
-          </div>
-          <div
-            className={`text-2xl font-bold font-mono ${
-              calculations.diffVsRandom >= 0
-                ? "text-emerald-600 dark:text-emerald-400"
-                : "text-rose-600 dark:text-rose-400"
-            }`}
-          >
-            {calculations.diffVsRandom >= 0 ? "+" : ""}
-            {formatCurrency(calculations.diffVsRandom, 0)}
-          </div>
-          <p className="text-[11px] text-slate-500 dark:text-slate-400">
-            Uplift value-add over random mail
-          </p>
-        </div>
-      </div>
-
-      {/* Break-Even Cost Analysis Card */}
-      <div className="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm space-y-3">
-        <div className="flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-          <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-            Unit Economics & Break-Even Analysis
-          </h3>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-          <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 space-y-1.5">
-            <div className="flex justify-between items-center">
-              <span className="font-semibold text-slate-700 dark:text-slate-300">
-                Positive ROI Break-Even Cost:
-              </span>
-              <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
-                ${calculations.roiBreakevenCost.toFixed(3)} / email
-              </span>
+                  <Percent className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                  <span>Contribution Margin</span>
+                </label>
+                <span className="font-mono font-bold text-teal-700 dark:text-teal-400 tabular text-sm">
+                  {(margin * 100).toFixed(0)}%
+                </span>
+              </div>
+              <input
+                id="margin-slider"
+                type="range"
+                min="0.05"
+                max="0.60"
+                step="0.01"
+                value={margin}
+                onChange={(e) => setMargin(parseFloat(e.target.value))}
+                aria-label="Contribution Margin"
+                className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-teal-700"
+              />
+              <div className="flex justify-between text-[10px] text-slate-400 tabular">
+                <span>Min: 5%</span>
+                <span>Default: 30%</span>
+                <span>Max: 60%</span>
+              </div>
             </div>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              Max contact cost before the top {Math.round(budgetFraction * 100)}% campaign loses money (&Pi; &lt; 0).
-              Current cost (${cost.toFixed(2)}) is{" "}
-              <strong className={cost <= calculations.roiBreakevenCost ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}>
-                {cost <= calculations.roiBreakevenCost ? "profitable" : "unprofitable"}
-              </strong>.
-            </p>
-          </div>
 
-          <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 space-y-1.5">
-            <div className="flex justify-between items-center">
-              <span className="font-semibold text-slate-700 dark:text-slate-300">
-                Selective vs Full-Campaign Break-Even:
-              </span>
-              <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
-                {calculations.selectiveBreakevenCost !== null
-                  ? `$${calculations.selectiveBreakevenCost.toFixed(3)} / email`
-                  : "N/A"}
-              </span>
+            {/* Slider 2: Cost per Email */}
+            <div className="space-y-2">
+              <div className="flex justify-between items-center text-xs">
+                <label
+                  htmlFor="cost-slider"
+                  className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5"
+                >
+                  <DollarSign className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                  <span>Cost per Contact</span>
+                </label>
+                <span className="font-mono font-bold text-teal-700 dark:text-teal-400 tabular text-sm">
+                  ${cost.toFixed(2)}
+                </span>
+              </div>
+              <input
+                id="cost-slider"
+                type="range"
+                min="0.00"
+                max="0.60"
+                step="0.01"
+                value={cost}
+                onChange={(e) => setCost(parseFloat(e.target.value))}
+                aria-label="Cost per Contact"
+                className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-teal-700"
+              />
+              <div className="flex justify-between text-[10px] text-slate-400 tabular">
+                <span>Min: $0.00</span>
+                <span>Default: $0.05</span>
+                <span>Max: $0.60</span>
+              </div>
             </div>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              Contact cost above which targeting the top {Math.round(budgetFraction * 100)}% beats emailing 100%.
-              Current cost (${cost.toFixed(2)}) is{" "}
-              {calculations.selectiveBreakevenCost !== null ? (
-                <strong className={cost >= calculations.selectiveBreakevenCost ? "text-indigo-600 dark:text-indigo-400" : "text-amber-600 dark:text-amber-400"}>
-                  {cost >= calculations.selectiveBreakevenCost
-                    ? "above threshold (selective targeting preferred)"
-                    : "below threshold (emailing everyone preferred)"}
-                </strong>
+
+            {/* Slider 3: Budget Fraction */}
+            <div className="space-y-2">
+              <div className="flex justify-between items-center text-xs">
+                <label
+                  htmlFor="budget-slider"
+                  className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5"
+                >
+                  <Layers className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                  <span>Targeting Budget</span>
+                </label>
+                <span className="font-mono font-bold text-teal-700 dark:text-teal-400 tabular text-sm">
+                  {Math.round(budgetFraction * 100)}% ({Math.round(budgetFraction * calculations.n_pop).toLocaleString()} users)
+                </span>
+              </div>
+              <input
+                id="budget-slider"
+                type="range"
+                min="0.05"
+                max="1.00"
+                step="0.05"
+                value={budgetFraction}
+                onChange={(e) => setBudgetFraction(parseFloat(e.target.value))}
+                aria-label="Targeting Budget Fraction"
+                className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-teal-700"
+              />
+              <div className="flex justify-between text-[10px] text-slate-400 tabular">
+                <span>Min: 5%</span>
+                <span>Selective: 30%</span>
+                <span>Full: 100%</span>
+              </div>
+            </div>
+
+            {/* Segmented Buttons for Policy Selector */}
+            <div className="space-y-2.5 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                Targeting Policy:
+              </label>
+              <div
+                className="grid grid-cols-1 gap-1.5"
+                role="radiogroup"
+                aria-label="Select targeting policy"
+              >
+                {POLICY_OPTIONS.map((pol) => {
+                  const active = selectedPolicy === pol.id;
+                  return (
+                    <button
+                      key={pol.id}
+                      role="radio"
+                      aria-checked={active}
+                      onClick={() => setSelectedPolicy(pol.id)}
+                      className={`w-full px-3 py-2 rounded-xl text-xs font-medium transition-all flex items-center justify-between border cursor-pointer ${
+                        active
+                          ? "bg-teal-50 dark:bg-teal-950/60 border-teal-600 dark:border-teal-500 text-teal-950 dark:text-teal-200 font-semibold shadow-xs"
+                          : "bg-slate-50/60 dark:bg-slate-800/40 border-slate-200/80 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-700"
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <span
+                          className={`w-2 h-2 rounded-full ${
+                            active ? "bg-teal-600 dark:bg-teal-400" : "bg-slate-300 dark:bg-slate-600"
+                          }`}
+                        />
+                        <span>{pol.label}</span>
+                      </span>
+                      <span className="text-[10px] font-normal text-slate-400 dark:text-slate-500">
+                        {pol.tag}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        {/* Right Column: Simulation Output, KPI Cards, Verdict, Chart, Contact Table */}
+        <div className="lg:col-span-8 space-y-8">
+          {/* Verdict Card: One Bold Sentence + Quiet Tag */}
+          <section
+            aria-label="Simulation Verdict"
+            className="p-6 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-[#111827] shadow-xs space-y-3"
+          >
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Simulation Verdict
+                </h2>
+              </div>
+              {calculations.isWithinVariation && !calculations.allProfitsNegative && (
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                  within split variation
+                </span>
+              )}
+            </div>
+
+            <p className="text-base sm:text-lg font-bold text-slate-900 dark:text-white leading-snug">
+              {calculations.allProfitsNegative ? (
+                <span>At ${cost.toFixed(2)} cost and {(margin * 100).toFixed(0)}% margin, no targeting policy is profitable &mdash; run No Campaign.</span>
+              ) : calculations.isWithinVariation ? (
+                <span>{calculations.winner.name} yields highest in-sample profit ({formatCurrency(calculations.winner.profit, 0)}), but the gap over {calculations.runnerUp.name} ({formatCurrency(calculations.gap, 0)}) is within split-to-split variation.</span>
               ) : (
-                "not applicable"
-              )}.
+                <span>{calculations.winner.name} is the clear profit-optimal decision at {formatCurrency(calculations.winner.profit, 0)}, outperforming {calculations.runnerUp.name} beyond sample noise.</span>
+              )}
             </p>
-          </div>
+
+            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+              Evaluating the top {Math.round(budgetFraction * 100)}% customers against a full 100% campaign and a $0 baseline on 10 repeated test sets.
+            </p>
+          </section>
+
+          {/* Three KPI Cards: Selected Policy, Target Everyone, No Campaign */}
+          <section className="grid grid-cols-1 sm:grid-cols-3 gap-4" aria-label="Key Performance Indicators">
+            {/* Card 1: Selected Policy */}
+            <div className="p-5 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-[#111827] shadow-xs space-y-2">
+              <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                <span>Selected Policy</span>
+                <TrendingUp className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+              </div>
+              <div className="text-2xl font-bold font-sans tabular text-slate-900 dark:text-white">
+                {formatCurrency(calculations.polProfit, 0)}
+              </div>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 tabular">
+                &plusmn;{formatCurrency(calculations.polVariation, 0)} cross-split SD
+              </div>
+              <div className="text-[11px] pt-1 border-t border-slate-100 dark:border-slate-800 text-slate-500">
+                <span>{selectedPolicyObj?.label} at {Math.round(budgetFraction * 100)}%</span>
+              </div>
+            </div>
+
+            {/* Card 2: Target Everyone */}
+            <div className="p-5 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-[#111827] shadow-xs space-y-2">
+              <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                <span>Target Everyone</span>
+                <Layers className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div className="text-2xl font-bold font-sans tabular text-slate-900 dark:text-white">
+                {formatCurrency(calculations.everyoneProfit, 0)}
+              </div>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 tabular">
+                &plusmn;{formatCurrency(calculations.everyoneVariation, 0)} cross-split SD
+              </div>
+              <div className="text-[11px] pt-1 border-t border-slate-100 dark:border-slate-800 text-slate-500">
+                <span>Full campaign (100% of customers)</span>
+              </div>
+            </div>
+
+            {/* Card 3: No Campaign */}
+            <div className="p-5 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-[#111827] shadow-xs space-y-2">
+              <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                <span>No Campaign</span>
+                <Ban className="w-4 h-4 text-slate-400" />
+              </div>
+              <div className="text-2xl font-bold font-sans tabular text-slate-900 dark:text-white">
+                $0
+              </div>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                Zero contact expenditure
+              </div>
+              <div className="text-[11px] pt-1 border-t border-slate-100 dark:border-slate-800 text-slate-500">
+                <span>Baseline natural transactions only</span>
+              </div>
+            </div>
+          </section>
+
+          {/* Break-Even Callout */}
+          <section
+            aria-label="Break-even Analysis"
+            className="p-5 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 space-y-3"
+          >
+            <div className="flex items-center gap-2">
+              <HelpCircle className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+              <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                Break-Even Economics for {selectedPolicyObj?.label} ({Math.round(budgetFraction * 100)}% budget)
+              </h3>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+              <div className="p-3.5 rounded-xl bg-white dark:bg-[#111827] border border-slate-200/80 dark:border-slate-800 space-y-1">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-600 dark:text-slate-400 font-medium">Positive ROI Ceiling:</span>
+                  <span className="font-mono font-bold text-teal-700 dark:text-teal-400 tabular text-sm">
+                    ${calculations.roiBreakevenCost.toFixed(3)}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 leading-snug">
+                  Maximum contact cost before targeting this cohort loses money. Current (${cost.toFixed(2)}) is{" "}
+                  <strong className={cost <= calculations.roiBreakevenCost ? "text-emerald-700 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}>
+                    {cost <= calculations.roiBreakevenCost ? "profitable" : "unprofitable"}
+                  </strong>.
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-white dark:bg-[#111827] border border-slate-200/80 dark:border-slate-800 space-y-1">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-600 dark:text-slate-400 font-medium">Selective vs Mass Threshold:</span>
+                  <span className="font-mono font-bold text-teal-700 dark:text-teal-400 tabular text-sm">
+                    {calculations.selectiveBreakevenCost !== null
+                      ? `$${calculations.selectiveBreakevenCost.toFixed(3)}`
+                      : "N/A"}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 leading-snug">
+                  Cost per email above which selective targeting beats mass mailing 100%. Current (${cost.toFixed(2)}) is{" "}
+                  {calculations.selectiveBreakevenCost !== null ? (
+                    <strong className={cost >= calculations.selectiveBreakevenCost ? "text-teal-700 dark:text-teal-400" : "text-amber-700 dark:text-amber-400"}>
+                      {cost >= calculations.selectiveBreakevenCost ? "above (selective preferred)" : "below (emailing everyone preferred)"}
+                    </strong>
+                  ) : (
+                    "not applicable"
+                  )}.
+                </p>
+              </div>
+            </div>
+          </section>
+
+          {/* Profit vs Budget Chart */}
+          <section className="space-y-4">
+            <ProfitChart
+              profitGrid={profitGrid}
+              margin={margin}
+              cost={cost}
+              selectedPolicy={selectedPolicy}
+              budgetFraction={budgetFraction}
+            />
+          </section>
+
+          {/* Contact Table with CSV Download */}
+          <section className="space-y-4">
+            <CustomerTable
+              customersData={customersData}
+              selectedPolicy={selectedPolicy}
+              budgetFraction={budgetFraction}
+            />
+          </section>
         </div>
       </div>
-
-      {/* Chart Section */}
-      <ProfitChart
-        profitGrid={profitGrid}
-        margin={margin}
-        cost={cost}
-        selectedPolicy={selectedPolicy}
-        budgetFraction={budgetFraction}
-      />
-
-      {/* Customer Contact List Table */}
-      <CustomerTable
-        customersData={customersData}
-        selectedPolicy={selectedPolicy}
-        budgetFraction={budgetFraction}
-      />
     </div>
   );
 }

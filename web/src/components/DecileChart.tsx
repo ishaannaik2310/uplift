@@ -35,14 +35,15 @@ export default function DecileChart({ deciles }: DecileChartProps) {
   const modelDeciles = deciles[selectedModel] || [];
 
   const chartData = modelDeciles.map((d) => ({
-    decile: `Decile ${d.decile}`,
+    decile: `D${d.decile}`,
+    fullDecile: `Decile ${d.decile}`,
     rate_t: Number((d.rate_t * 100).toFixed(2)),
     rate_c: Number((d.rate_c * 100).toFixed(2)),
     uplift: Number((d.uplift * 100).toFixed(2)),
   }));
 
   return (
-    <div className="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm space-y-4">
+    <div className="p-6 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-[#111827] shadow-xs space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
@@ -54,19 +55,19 @@ export default function DecileChart({ deciles }: DecileChartProps) {
             </span>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Treated vs control visit rate and incremental lift across 10 customer score buckets
+            Treated vs control visit rates and incremental lift sorted by predicted score deciles (D1 highest score)
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           <label htmlFor="decile-model-select" className="text-xs text-slate-500 font-medium">
-            Model:
+            Select Model:
           </label>
           <select
             id="decile-model-select"
             value={selectedModel}
             onChange={(e) => setSelectedModel(e.target.value)}
-            className="text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md px-2.5 py-1.5 text-slate-900 dark:text-white font-medium focus:ring-1 focus:ring-indigo-500"
+            className="text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-1.5 text-slate-900 dark:text-white font-medium focus:ring-1 focus:ring-teal-500 focus:outline-hidden"
           >
             {Object.keys(deciles).map((mid) => (
               <option key={mid} value={mid}>
@@ -77,16 +78,21 @@ export default function DecileChart({ deciles }: DecileChartProps) {
         </div>
       </div>
 
+      <div className="sr-only">
+        Decile uplift bar chart for {MODEL_NAMES[selectedModel] || selectedModel}.
+        Higher deciles demonstrate higher incremental visit lift between treated and control groups.
+      </div>
+
       <div className="h-80 sm:h-96 w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" className="dark:stroke-slate-800" />
+          <BarChart data={chartData} margin={{ top: 10, right: 15, left: 15, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="2 4" stroke="#e2e8f0" className="dark:stroke-slate-800/80" />
             <XAxis dataKey="decile" tick={{ fontSize: 11 }} stroke="#94a3b8" />
             <YAxis
               tick={{ fontSize: 11 }}
               stroke="#94a3b8"
               tickFormatter={(v) => `${v}%`}
-              label={{ value: "Visit Rate / Lift (%)", angle: -90, position: "insideLeft", offset: 15, fontSize: 11 }}
+              label={{ value: "Visit Rate / Incremental Lift (%)", angle: -90, position: "insideLeft", offset: 15, fontSize: 11 }}
             />
             <Tooltip
               formatter={(value, name) => [
@@ -97,12 +103,14 @@ export default function DecileChart({ deciles }: DecileChartProps) {
                   ? "Control Visit Rate"
                   : "Incremental Uplift",
               ]}
+              labelFormatter={(_, payload) => payload?.[0]?.payload?.fullDecile || ""}
               contentStyle={{
                 backgroundColor: "rgba(15, 23, 42, 0.95)",
                 borderColor: "#334155",
-                borderRadius: "8px",
+                borderRadius: "10px",
                 fontSize: "12px",
                 color: "#f8fafc",
+                boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.2)",
               }}
             />
             <Legend
@@ -115,9 +123,9 @@ export default function DecileChart({ deciles }: DecileChartProps) {
               }
               wrapperStyle={{ fontSize: "11px", paddingTop: "8px" }}
             />
-            <Bar dataKey="rate_t" fill="#6366f1" radius={[3, 3, 0, 0]} />
+            <Bar dataKey="rate_t" fill="#0f766e" radius={[3, 3, 0, 0]} />
             <Bar dataKey="rate_c" fill="#94a3b8" radius={[3, 3, 0, 0]} />
-            <Bar dataKey="uplift" fill="#10b981" radius={[3, 3, 0, 0]} />
+            <Bar dataKey="uplift" fill="#059669" radius={[3, 3, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
