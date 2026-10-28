@@ -46,11 +46,41 @@ export async function fetchXLearnerParams(): Promise<XLearnerParams> {
   return cachedXLearnerParams as XLearnerParams;
 }
 
-export async function fetchSampleCustomersCsv(): Promise<string> {
-  const res = await fetch("/data/sample_customers.csv");
+export interface SampleDatasetMetadata {
+  id: string;
+  name: string;
+  badge: string;
+  rows: number;
+  filename: string;
+  url: string;
+  tagline: string;
+  description: string;
+  scenario: string;
+}
+
+let cachedManifest: SampleDatasetMetadata[] | null = null;
+
+export async function fetchSampleDatasetsManifest(): Promise<SampleDatasetMetadata[]> {
+  if (cachedManifest) return cachedManifest;
+  const res = await fetch("/data/samples/manifest.json");
   if (!res.ok) {
-    throw new Error(`Failed to load sample_customers.csv: HTTP ${res.status}`);
+    throw new Error(`Failed to load samples manifest.json: HTTP ${res.status}`);
+  }
+  cachedManifest = await res.json();
+  return cachedManifest as SampleDatasetMetadata[];
+}
+
+export async function fetchSampleCsvByUrl(url: string): Promise<string> {
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Failed to load sample CSV from ${url}: HTTP ${res.status}`);
   }
   return await res.text();
 }
+
+export async function fetchSampleCustomersCsv(): Promise<string> {
+  return fetchSampleCsvByUrl("/data/sample_customers.csv");
+}
+
+
 

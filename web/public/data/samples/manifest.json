@@ -1,0 +1,57 @@
+[
+  {
+    "id": "test_cohort_500",
+    "name": "Standard Benchmark",
+    "badge": "Balanced RCT Split",
+    "rows": 500,
+    "filename": "sample_test_cohort_500.csv",
+    "url": "/data/samples/sample_test_cohort_500.csv",
+    "tagline": "500 real customers from test split",
+    "description": "Representative cross-section of 500 held-out customers across all channels, history brackets, and urban/rural regions.",
+    "scenario": "General promotional campaign evaluating broad-brush baseline targeting vs. causal uplift."
+  },
+  {
+    "id": "real_cohort_5000",
+    "name": "Real Full Test Cohort",
+    "badge": "Large Real Dataset",
+    "rows": 5000,
+    "filename": "sample_real_cohort_5000.csv",
+    "url": "/data/samples/sample_real_cohort_5000.csv",
+    "tagline": "5,000 real customers directly from RCT",
+    "description": "Full 5,000-customer slice from the real 2008 Kevin Hillstrom experiment. Tests client-side browser throughput and large-budget profit optimization.",
+    "scenario": "Enterprise campaign planning with high customer volume, realistic contact costs, and substantial dollar returns."
+  },
+  {
+    "id": "dormant_vips",
+    "name": "Dormant VIP Customers",
+    "badge": "Win-Back Cohort",
+    "rows": 600,
+    "filename": "sample_dormant_vips.csv",
+    "url": "/data/samples/sample_dormant_vips.csv",
+    "tagline": "600 customers \u00b7 History \u2265 $300 \u00b7 Recency \u2265 7 mos",
+    "description": "High-lifetime-value customers at serious risk of churn who have not purchased in over 7 months.",
+    "scenario": "Reactivation / Win-back campaign: isolates Persuadables from Sleeping Dogs who might unsubscribe when nudged."
+  },
+  {
+    "id": "active_multichannel",
+    "name": "Active Omnichannel Shoppers",
+    "badge": "Sure Thing Risk",
+    "rows": 750,
+    "filename": "sample_active_multichannel.csv",
+    "url": "/data/samples/sample_active_multichannel.csv",
+    "tagline": "750 customers \u00b7 Recency \u2264 3 mos \u00b7 Web + Phone",
+    "description": "Highly engaged omnichannel customers who purchased within the last 90 days and shop across multiple touchpoints.",
+    "scenario": "Cross-sell campaign: reveals how naive response targeting wastes precious budget on 'Sure Things' who buy anyway."
+  },
+  {
+    "id": "first_time_buyers",
+    "name": "First-Time Buyers (Newbies)",
+    "badge": "Onboarding Cohort",
+    "rows": 800,
+    "filename": "sample_first_time_buyers.csv",
+    "url": "/data/samples/sample_first_time_buyers.csv",
+    "tagline": "800 customers \u00b7 First-time buyers \u00b7 Spend < $150",
+    "description": "Newly acquired customers with modest initial purchases who are making decisions about their second brand purchase.",
+    "scenario": "Onboarding & early-lifecycle activation: identifying which new customers need targeted incentives to repeat buy."
+  }
+]

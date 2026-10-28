@@ -17,9 +17,19 @@ import {
   ChevronRight,
   RefreshCw,
   Search,
+  Database,
+  Play,
+  Info,
 } from "lucide-react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell } from "recharts";
-import { fetchProfitGridData, fetchXLearnerParams, fetchSampleCustomersCsv } from "@/lib/data";
+import {
+  fetchProfitGridData,
+  fetchXLearnerParams,
+  fetchSampleCustomersCsv,
+  fetchSampleDatasetsManifest,
+  fetchSampleCsvByUrl,
+  SampleDatasetMetadata,
+} from "@/lib/data";
 import { ProfitGridData } from "@/lib/types";
 import { formatCurrency, formatPercent, formatNumber } from "@/lib/formatters";
 import {
@@ -98,6 +108,9 @@ export default function PlannerPage() {
   const [initialError, setInitialError] = useState<string | null>(null);
 
   // Upload & File State
+  const [manifest, setManifest] = useState<SampleDatasetMetadata[]>([]);
+  const [selectedSampleId, setSelectedSampleId] = useState<string | null>(null);
+  const [activeScenario, setActiveScenario] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
@@ -116,14 +129,19 @@ export default function PlannerPage() {
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // 1. Load Model Weights & Profit Curves
+  // 1. Load Model Weights, Profit Curves & Sample Manifest
   useEffect(() => {
-    Promise.all([fetchXLearnerParams(), fetchProfitGridData()])
-      .then(([p, grid]) => {
+    Promise.all([
+      fetchXLearnerParams(),
+      fetchProfitGridData(),
+      fetchSampleDatasetsManifest().catch(() => []),
+    ])
+      .then(([p, grid, m]) => {
         setParams(p);
         setProfitGrid(grid);
         if (grid.default_margin) setMargin(grid.default_margin);
         if (grid.default_cost) setCost(grid.default_cost);
+        if (m && m.length > 0) setManifest(m);
         setLoadingInitial(false);
       })
       .catch((err) => {
@@ -176,15 +194,32 @@ export default function PlannerPage() {
     });
   };
 
-  // 3. Load Sample Data
-  const handleLoadSampleData = async () => {
+  // 3. Load Sample Datasets
+  const handleLoadSampleDataset = async (dataset: SampleDatasetMetadata) => {
     try {
       setIsProcessing(true);
-      const csvText = await fetchSampleCustomersCsv();
-      handleProcessCsv(csvText, "sample_customers.csv (500 held-out test units)");
+      setSelectedSampleId(dataset.id);
+      setActiveScenario(dataset.scenario);
+      const csvText = await fetchSampleCsvByUrl(dataset.url);
+      handleProcessCsv(csvText, `${dataset.name} (${dataset.rows.toLocaleString()} customers)`);
     } catch (err) {
       alert(`Could not load sample file: ${err instanceof Error ? err.message : String(err)}`);
       setIsProcessing(false);
+    }
+  };
+
+  const handleLoadSampleData = async () => {
+    if (manifest.length > 0) {
+      await handleLoadSampleDataset(manifest[0]);
+    } else {
+      try {
+        setIsProcessing(true);
+        const csvText = await fetchSampleCustomersCsv();
+        handleProcessCsv(csvText, "sample_customers.csv (500 held-out test units)");
+      } catch (err) {
+        alert(`Could not load sample file: ${err instanceof Error ? err.message : String(err)}`);
+        setIsProcessing(false);
+      }
     }
   };
 
@@ -196,12 +231,16 @@ export default function PlannerPage() {
     e.preventDefault();
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const file = e.dataTransfer.files[0];
+      setSelectedSampleId(null);
+      setActiveScenario(null);
       handleProcessCsv(file, file.name);
     }
   };
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
+      setSelectedSampleId(null);
+      setActiveScenario(null);
       handleProcessCsv(file, file.name);
     }
   };
@@ -509,29 +548,121 @@ export default function PlannerPage() {
 
         {/* Success / Status Summary */}
         {scoredCustomers && scoredCustomers.length > 0 && (
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-600 dark:text-slate-400 border-t border-slate-200 dark:border-slate-800 pt-4">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              <span>
-                <strong>{fileName}:</strong> {formatNumber(scoredCustomers.length)} customers successfully scored in{" "}
-                {processingTimeMs ?? 0}ms.
+          <div className="mt-4 space-y-2 border-t border-slate-200 dark:border-slate-800 pt-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-600 dark:text-slate-400">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                <span>
+                  <strong>{fileName}:</strong> {formatNumber(scoredCustomers.length)} customers successfully scored in{" "}
+                  {processingTimeMs ?? 0}ms.
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleDownloadCsv}
+                  className="inline-flex items-center gap-1.5 font-semibold text-teal-700 dark:text-teal-400 hover:underline cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Export Ranked CSV
+                </button>
+                <button
+                  onClick={() => window.print()}
+                  className="inline-flex items-center gap-1.5 font-semibold text-slate-700 dark:text-slate-300 hover:underline cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  Print Campaign Brief
+                </button>
+              </div>
+            </div>
+
+            {activeScenario && (
+              <div className="p-2.5 rounded-lg bg-teal-50 dark:bg-teal-950/40 border border-teal-200/80 dark:border-teal-800/80 flex items-start gap-2 text-xs text-teal-900 dark:text-teal-200">
+                <Info className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0 mt-0.5" />
+                <span>
+                  <strong>Campaign Scenario Focus:</strong> {activeScenario}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 5 Real Experiment Sample Datasets */}
+        {manifest.length > 0 && (
+          <div className="mt-8 pt-6 border-t border-slate-200 dark:border-slate-800">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Database className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                  Explore 5 Real Experiment Cohorts
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Sampled directly from Kevin Hillstrom&apos;s RCT test split. Test real-world cohorts with 1 click or download the CSVs.
+                </p>
+              </div>
+              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 self-start sm:self-auto">
+                Zero Leakage · Real RCT Data
               </span>
             </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={handleDownloadCsv}
-                className="inline-flex items-center gap-1.5 font-semibold text-teal-700 dark:text-teal-400 hover:underline"
-              >
-                <Download className="w-3.5 h-3.5" />
-                Export Ranked CSV
-              </button>
-              <button
-                onClick={() => window.print()}
-                className="inline-flex items-center gap-1.5 font-semibold text-slate-700 dark:text-slate-300 hover:underline"
-              >
-                <Printer className="w-3.5 h-3.5" />
-                Print Campaign Brief
-              </button>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {manifest.map((item) => {
+                const isCurrent = selectedSampleId === item.id;
+                return (
+                  <div
+                    key={item.id}
+                    className={`p-3.5 rounded-xl border text-left transition-all flex flex-col justify-between ${
+                      isCurrent
+                        ? "bg-teal-50/70 dark:bg-teal-950/40 border-teal-500 shadow-xs"
+                        : "bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700"
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-1 mb-1.5">
+                        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-200/80 dark:bg-slate-700/60 text-slate-700 dark:text-slate-300">
+                          {item.badge}
+                        </span>
+                        <span className="text-xs font-mono font-medium text-slate-500 dark:text-slate-400">
+                          {formatNumber(item.rows)} rows
+                        </span>
+                      </div>
+                      <h4 className="text-xs font-bold text-slate-900 dark:text-white">
+                        {item.name}
+                      </h4>
+                      <p className="text-[11px] font-mono text-teal-700 dark:text-teal-400 mt-0.5">
+                        {item.tagline}
+                      </p>
+                      <p className="text-xs text-slate-600 dark:text-slate-400 mt-1.5 leading-snug">
+                        {item.description}
+                      </p>
+                    </div>
+
+                    <div className="mt-3 pt-2.5 border-t border-slate-200/80 dark:border-slate-700/60 flex items-center justify-between gap-2">
+                      <button
+                        type="button"
+                        disabled={isProcessing}
+                        onClick={() => handleLoadSampleDataset(item)}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-xs cursor-pointer ${
+                          isCurrent
+                            ? "bg-teal-700 text-white hover:bg-teal-800"
+                            : "bg-white dark:bg-slate-800 text-teal-800 dark:text-teal-300 border border-teal-200 dark:border-teal-800 hover:bg-teal-50 dark:hover:bg-teal-950/50"
+                        }`}
+                      >
+                        <Play className="w-3 h-3 fill-current" />
+                        {isCurrent ? "Active Dataset" : "Load & Score"}
+                      </button>
+                      <a
+                        href={item.url}
+                        download={item.filename}
+                        title={`Download raw ${item.filename}`}
+                        className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:underline"
+                      >
+                        <Download className="w-3 h-3" />
+                        CSV
+                      </a>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -965,7 +1096,8 @@ export default function PlannerPage() {
                 Targeting Campaign Plan & Executive Brief
               </h1>
               <p className="text-xs text-slate-600 mt-1">
-                Generated via X-Learner Causal Machine Learning Engine &bull; File: {fileName}
+                Generated via X-Learner Causal Machine Learning Engine &bull; Cohort: {fileName}
+                {activeScenario && ` — Focus: ${activeScenario}`}
               </p>
             </div>
 
