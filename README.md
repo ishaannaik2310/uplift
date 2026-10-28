@@ -162,6 +162,9 @@ python src/profit.py
 python src/export_for_web.py
 ```
 
+> **Note on Reproduction Steps**:
+> `python src/run_experiments.py` trains the models and records metrics across seeds, but does not produce the statistical t-tests or profit curves. You must execute `python src/stats_tests.py`, `python src/profit.py`, and `python src/export_for_web.py` as separate steps in order to generate the full analysis and web artifacts.
+
 > **Note on `results/predictions_all_seeds.csv`**:
 > The full multi-seed predictions file (`predictions_all_seeds.csv`, ~37.3 MB) is excluded from version control to keep git operations lightweight. Running `python src/profit.py` regenerates this file completely from existing experiment outputs. `results/predictions_seed0.csv` (3.7 MB) remains tracked in the repository for immediate analysis.
 
