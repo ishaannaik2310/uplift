@@ -10,7 +10,7 @@ An end-to-end causal machine learning pipeline and interactive web dashboard eva
   - `[Member Name 1]` &bull; PRN: `[PRN 1]`
   - `[Member Name 2]` &bull; PRN: `[PRN 2]`
   - `[Member Name 3]` &bull; PRN: `[PRN 3]`
-- **Interactive Web App**: `[https://your-deployment-url.vercel.app]` *(Vercel deployment placeholder)*
+- **Interactive Web App**: [https://uplift-weld-zeta.vercel.app](https://uplift-weld-zeta.vercel.app)
 - **Repository**: [https://github.com/ishaannaik2310/uplift](https://github.com/ishaannaik2310/uplift)
 
 ---
