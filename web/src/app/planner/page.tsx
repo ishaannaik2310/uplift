@@ -321,21 +321,25 @@ export default function PlannerPage() {
     };
   }, [scoredCustomers]);
 
-  // 6. Stretch Goal: Overlap Analysis (Top 20% by Naive mu0 vs Top 20% by Uplift)
-  const overlapAnalysis = useMemo(() => {
+  // 6. Strategy Comparison: Standard method vs. Uplift method (Top 20% by Baseline mu0 vs Top 20% by Uplift)
+  const comparisonData = useMemo(() => {
     if (!scoredCustomers || scoredCustomers.length < 10) return null;
-    const kCount = Math.max(1, Math.round(scoredCustomers.length * 0.2));
+    const total = scoredCustomers.length;
+    const kCount = Math.max(1, Math.round(total * 0.2));
 
-    // Top K by Uplift (already sorted)
-    const topUpliftIds = new Set(scoredCustomers.slice(0, kCount).map((c) => c.id));
+    // Top 20% by Uplift (already stably sorted by predicted uplift descending)
+    const topUpliftPool = scoredCustomers.slice(0, kCount);
+    const topUpliftIds = new Set(topUpliftPool.map((c) => c.id));
 
-    // Top K by Naive purchase probability mu0
+    // Top 20% by Standard / Naive Baseline Probability mu0
     const sortedByMu0 = [...scoredCustomers].sort((a, b) => {
       if (b.mu0Prob !== a.mu0Prob) return b.mu0Prob - a.mu0Prob;
       return a.originalRowIndex - b.originalRowIndex;
     });
-    const topMu0Ids = new Set(sortedByMu0.slice(0, kCount).map((c) => c.id));
+    const topMu0Pool = sortedByMu0.slice(0, kCount);
+    const topMu0Ids = new Set(topMu0Pool.map((c) => c.id));
 
+    // Overlap across the top 20%
     let overlapCount = 0;
     topUpliftIds.forEach((id) => {
       if (topMu0Ids.has(id)) overlapCount++;
@@ -344,11 +348,20 @@ export default function PlannerPage() {
     const overlapPct = (overlapCount / kCount) * 100;
     const disjointCount = kCount - overlapCount;
 
+    // Top 10 short ranked lists for side-by-side display
+    const top10Standard = topMu0Pool.slice(0, 10);
+    const top10Uplift = topUpliftPool.slice(0, 10);
+
     return {
+      total,
       kCount,
       overlapCount,
       overlapPct,
       disjointCount,
+      topUpliftIds,
+      topMu0Ids,
+      top10Standard,
+      top10Uplift,
     };
   }, [scoredCustomers]);
 
@@ -885,44 +898,170 @@ export default function PlannerPage() {
             </div>
           </div>
 
-          {/* 5. Naive vs Uplift Overlap (Stretch Goal) */}
-          {overlapAnalysis && (
-            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-xs space-y-4">
-              <div className="flex items-center gap-2">
-                <span className="p-1 rounded-md bg-teal-100 dark:bg-teal-900 text-teal-800 dark:text-teal-200">
-                  <Layers className="w-4 h-4" />
-                </span>
-                <h3 className="text-base font-serif font-bold text-slate-900 dark:text-white">
-                  Why Causal Targeting Beats Naive Propensity: The Top 20% Overlap
-                </h3>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
-                <div className="md:col-span-2 text-sm text-slate-600 dark:text-slate-300 space-y-2 leading-relaxed">
-                  <p>
-                    A standard propensity/response model picks customers with high baseline purchase rates (Sure Things).
-                    Comparing the top 20% ({formatNumber(overlapAnalysis.kCount)} customers) selected by **Naive Propensity** versus{" "}
-                    **Causal Uplift**:
+          {/* 5. Standard method vs. Uplift method comparison panel */}
+          {comparisonData && (
+            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-xs space-y-6">
+              {/* Header with single-number overlap metric & explanation sentence */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-slate-200 dark:border-slate-800 pb-6">
+                <div className="space-y-1.5 max-w-2xl">
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[11px] font-semibold">
+                    <Layers className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                    Targeting Strategy Comparison (Estimated)
+                  </div>
+                  <h3 className="text-xl sm:text-2xl font-serif font-bold text-slate-900 dark:text-white">
+                    Standard method vs. Uplift method
+                  </h3>
+                  <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                    The standard method targets people likely to buy anyway. The uplift method targets people whose behavior is likely to change.
                   </p>
-                  <p className="font-semibold text-slate-900 dark:text-white">
-                    Only {overlapAnalysis.overlapPct.toFixed(1)}% of targets overlap ({formatNumber(overlapAnalysis.overlapCount)} customers).
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    The naive model targets {formatNumber(overlapAnalysis.disjointCount)} customers who would have visited anyway. Causal
-                    uplift targeting swaps them for genuine Persuadables who generate incremental revenue.
+                  <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                    Evaluated across the top 20% of your audience ({formatNumber(comparisonData.kCount)} customers) by estimated baseline purchase probability versus estimated predicted uplift.
                   </p>
                 </div>
 
-                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-center space-y-1">
-                  <span className="text-[11px] text-slate-500 uppercase tracking-wider font-semibold">
-                    Disjoint Targets Replaced
+                {/* Overlap Single Number Callout */}
+                <div className="p-4 rounded-xl bg-teal-50/70 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 text-center shrink-0 md:min-w-[260px]">
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-teal-800 dark:text-teal-300">
+                    Estimated Strategy Overlap
                   </span>
-                  <p className="text-3xl font-serif font-bold text-teal-700 dark:text-teal-400 tabular">
-                    {formatNumber(overlapAnalysis.disjointCount)}
+                  <p className="text-3xl sm:text-4xl font-serif font-bold text-teal-900 dark:text-teal-200 tabular my-1">
+                    {comparisonData.overlapPct.toFixed(1)}%
                   </p>
-                  <span className="text-xs text-slate-500">
-                    {((overlapAnalysis.disjointCount / overlapAnalysis.kCount) * 100).toFixed(0)}% budget redirected from Sure Things
-                  </span>
+                  <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                    {comparisonData.overlapPct.toFixed(1)}% of customers appear in both lists.
+                  </p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    ({formatNumber(comparisonData.overlapCount)} of {formatNumber(comparisonData.kCount)} estimated top-20% targets)
+                  </p>
+                </div>
+              </div>
+
+              {/* Side-by-Side Ranked Lists (Top 10 each) */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Left: Standard Method (Top 10 by Baseline Purchase Probability) */}
+                <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 p-4 sm:p-5 flex flex-col justify-between space-y-4">
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                        Standard Method (Estimated)
+                      </span>
+                      <span className="text-[10px] uppercase font-semibold text-slate-500">
+                        Top 10 of {formatNumber(comparisonData.kCount)}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Ranked by estimated baseline purchase probability (&mu;&#8320;). Favors high-loyalty customers regardless of whether marketing was the cause.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    {comparisonData.top10Standard.map((c, idx) => {
+                      const isExclusive = !comparisonData.topUpliftIds.has(c.id);
+                      return (
+                        <div
+                          key={c.id}
+                          className={`p-2.5 rounded-lg border text-xs transition-all flex items-center justify-between gap-2 ${
+                            isExclusive
+                              ? "bg-amber-50/80 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800/80 shadow-xs"
+                              : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <span className="font-mono text-xs font-bold text-slate-400 dark:text-slate-500 w-5 text-right">
+                              #{idx + 1}
+                            </span>
+                            <div className="min-w-0">
+                              <div className="font-mono font-semibold text-slate-900 dark:text-slate-100 truncate">
+                                {c.id}
+                              </div>
+                              <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                                Rec: {c.raw.recency}m · Hist: {formatCurrency(Number(c.raw.history), 0)} · {c.raw.channel}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-col items-end shrink-0 gap-1">
+                            <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">
+                              {formatPercent(c.mu0Prob, 2)} <span className="text-[10px] text-slate-400 font-normal">est. base</span>
+                            </span>
+                            {isExclusive ? (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-100 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 border border-amber-300 dark:border-amber-700">
+                                Only in Standard list
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                                In both lists
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Right: Uplift Method (Top 10 by Predicted Uplift) */}
+                <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 p-4 sm:p-5 flex flex-col justify-between space-y-4">
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-teal-500"></span>
+                        Uplift Method (Estimated)
+                      </span>
+                      <span className="text-[10px] uppercase font-semibold text-slate-500">
+                        Top 10 of {formatNumber(comparisonData.kCount)}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Ranked by estimated incremental uplift (&tau;). Focuses strictly on Persuadables whose purchase is caused by outreach.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    {comparisonData.top10Uplift.map((c, idx) => {
+                      const isExclusive = !comparisonData.topMu0Ids.has(c.id);
+                      return (
+                        <div
+                          key={c.id}
+                          className={`p-2.5 rounded-lg border text-xs transition-all flex items-center justify-between gap-2 ${
+                            isExclusive
+                              ? "bg-teal-50/80 dark:bg-teal-950/30 border-teal-300 dark:border-teal-800/80 shadow-xs"
+                              : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <span className="font-mono text-xs font-bold text-slate-400 dark:text-slate-500 w-5 text-right">
+                              #{idx + 1}
+                            </span>
+                            <div className="min-w-0">
+                              <div className="font-mono font-semibold text-slate-900 dark:text-slate-100 truncate">
+                                {c.id}
+                              </div>
+                              <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                                Rec: {c.raw.recency}m · Hist: {formatCurrency(Number(c.raw.history), 0)} · {c.raw.channel}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-col items-end shrink-0 gap-1">
+                            <span className="font-mono font-semibold text-teal-700 dark:text-teal-400">
+                              +{(c.uplift * 100).toFixed(2)}% <span className="text-[10px] text-slate-400 font-normal">est. uplift</span>
+                            </span>
+                            {isExclusive ? (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-teal-100 dark:bg-teal-900/60 text-teal-900 dark:text-teal-200 border border-teal-300 dark:border-teal-700">
+                                Only in Uplift list
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                                In both lists
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             </div>
